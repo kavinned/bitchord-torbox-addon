@@ -1,0 +1,13 @@
+name = "bitchord-addon"
+main = "src/index.ts"
+compatibility_date = "2026-10-29"
+
+# PATH_SECRET and TORBOX_KEY are secrets: .dev.vars locally, `wrangler secret put` deployed.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bitchord-addon"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[triggers]
+crons = ["*/2 * * * *"]
