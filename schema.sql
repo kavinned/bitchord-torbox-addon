@@ -25,8 +25,9 @@ CREATE TRIGGER IF NOT EXISTS tracks_ai AFTER INSERT ON tracks BEGIN
 END;
 
 CREATE TABLE IF NOT EXISTS sync_state (
-  id     INTEGER PRIMARY KEY CHECK (id = 1),
-  cursor INTEGER NOT NULL DEFAULT 0
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  cursor       INTEGER NOT NULL DEFAULT 0,
+  next_walk_at INTEGER NOT NULL DEFAULT 0
 );
 
-INSERT OR IGNORE INTO sync_state (id, cursor) VALUES (1, 0);
+INSERT OR IGNORE INTO sync_state (id, cursor, next_walk_at) VALUES (1, 0, 0);

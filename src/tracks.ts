@@ -44,14 +44,16 @@ export function isAudio(shortName: string, mimetype?: string): boolean {
 
 /**
  * An FTS5 MATCH expression, or null when the query has nothing to look for.
- * Tokens are quoted so no operator in the input can reach the parser.
+ *
+ * Split on anything that is not a letter or digit, because that is exactly what
+ * `unicode61` does to the indexed text: `"Re-Up"` is indexed as `re`, `up`. A
+ * query that kept the hyphen (`reup`) would match nothing.
  */
 export function buildMatchQuery(q: string): string | null {
   const tokens = q
     .toLowerCase()
-    .split(/\s+/)
-    .map((t) => t.replace(/[^\p{L}\p{N}'"]/gu, ""))
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((t) => t.length >= 2);
   if (tokens.length === 0) return null;
-  return tokens.map((t) => `"${t.replace(/"/g, '""')}"*`).join(" OR ");
+  return tokens.map((t) => `"${t}"*`).join(" OR ");
 }

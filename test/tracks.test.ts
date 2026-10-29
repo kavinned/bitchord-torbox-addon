@@ -28,8 +28,10 @@ test("query is quoted and prefix-matched per token", () => {
   expect(buildMatchQuery("  a  ")).toBeNull();
 });
 
-test("quotes in input cannot break out of a token", () => {
-  expect(buildMatchQuery('foo"bar')).toBe('"foo""bar"*');
+test("punctuation splits tokens the same way the fts index does", () => {
+  expect(buildMatchQuery('foo"bar')).toBe('"foo"* OR "bar"*');
+  expect(buildMatchQuery("re-up")).toBe('"re"* OR "up"*');
+  expect(buildMatchQuery("ac/dc")).toBe('"ac"* OR "dc"*');
 });
 
 test("fts operators in input are inert", () => {
