@@ -51,7 +51,7 @@ async function search(url: URL, env: Env): Promise<Response> {
 
   try {
     const { results } = await env.DB.prepare(
-      `SELECT t.torrent_id, t.file_id, t.title, t.artist, t.album, t.format
+      `SELECT t.torrent_id, t.file_id, t.title, t.artist, t.album, t.format, t.duration
          FROM tracks_fts f JOIN tracks t ON t.id = f.rowid
         WHERE tracks_fts MATCH ?1
         ORDER BY f.rank
@@ -67,6 +67,7 @@ async function search(url: URL, env: Env): Promise<Response> {
         artist: r.artist,
         album: r.album ?? "",
         format: r.format,
+        duration: r.duration ?? undefined,
       })),
     });
   } catch (err) {

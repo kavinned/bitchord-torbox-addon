@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS tracks (
   album      TEXT,
   size       INTEGER NOT NULL,
   format     TEXT    NOT NULL,
+  -- Seconds, read from the FLAC STREAMINFO header. Null until the backfill has
+  -- seen the file. The app refuses a mid-track swap without it: a candidate
+  -- whose runtime differs by more than 2 s is not the same recording.
+  duration   INTEGER,
   UNIQUE (torrent_id, file_id)
 );
 
