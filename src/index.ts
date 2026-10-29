@@ -85,6 +85,10 @@ async function search(url: URL, env: Env): Promise<Response> {
  *
  * The answer is cached, not just the URL: a warm hit then costs one cache read
  * and no D1 row and no TorBox call.
+ *
+ * The TTL bounds staleness for a `cdn_selection` change, not validity — the
+ * links live for hours. Worst case is this 240 s plus the app's own 5-minute
+ * reuse of a returned URL, so ~9 minutes, not 4.
  */
 async function stream(id: string, env: Env, ctx: ExecutionContext): Promise<Response> {
   const m = /^(\d+):(\d+)$/.exec(id);
