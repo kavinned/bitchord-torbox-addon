@@ -11,3 +11,7 @@ database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
 
 [triggers]
 crons = ["*/2 * * * *"]
+
+# Enabled on the dashboard already; stated here so a deploy does not turn it off.
+[observability]
+enabled = true

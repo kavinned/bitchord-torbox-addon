@@ -1,4 +1,4 @@
-import { buildMatchQuery, extensionOf, isAudio, parseArtist, parseTitle } from "./tracks";
+import { buildMatchQuery, extensionOf, flacSeconds, isFlac, parseArtist, parseTitle, publicDuration } from "./tracks";
 import type { Env } from "./types";
 
 const MANIFEST = {
@@ -41,9 +41,74 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
-    ctx.waitUntil(sync(env));
+    ctx.waitUntil(
+      (async () => {
+        await sync(env);
+        await fillDurations(env);
+      })(),
+    );
   },
 } satisfies ExportedHandler<Env>;
+
+/** Two subrequests per row, against a 50-per-invocation ceiling. */
+const FILL_PER_TICK = 20;
+
+/**
+ * Fills `duration` for rows the indexer inserted without one.
+ *
+ * A row the prober cannot reach is marked -1 rather than left null: null means
+ * "not asked yet", and leaving it null would spend this tick's whole budget on
+ * the same unreachable files forever.
+ */
+async function fillDurations(env: Env): Promise<void> {
+  if (!env.TORBOX_KEY) return;
+
+  const { results } = await env.DB.prepare(
+    "SELECT id, torrent_id, file_id FROM tracks WHERE duration IS NULL LIMIT ?1",
+  )
+    .bind(FILL_PER_TICK)
+    .all<{ id: number; torrent_id: number; file_id: number }>();
+  if (!results || results.length === 0) return;
+
+  const updates: D1PreparedStatement[] = [];
+  for (const row of results) {
+    let seconds: number | null = null;
+    try {
+      seconds = await probeDuration(env, row.torrent_id, row.file_id);
+    } catch (err) {
+      console.error("duration probe failed:", err instanceof Error ? err.message : err);
+    }
+    updates.push(
+      env.DB.prepare("UPDATE tracks SET duration = ?1 WHERE id = ?2").bind(seconds ?? -1, row.id),
+    );
+  }
+
+  try {
+    await env.DB.batch(updates);
+  } catch (err) {
+    console.error("duration write failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+/** Seconds of audio in one file, or null when it cannot be read. */
+async function probeDuration(env: Env, torrentId: number, fileId: number): Promise<number | null> {
+  const api = new URL("https://api.torbox.app/v1/api/torrents/requestdl");
+  api.searchParams.set("token", env.TORBOX_KEY);
+  api.searchParams.set("torrent_id", String(torrentId));
+  api.searchParams.set("file_id", String(fileId));
+  api.searchParams.set("redirect", "false");
+
+  const res = await fetch(api, { headers: { Authorization: `Bearer ${env.TORBOX_KEY}` } });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { success?: boolean; data?: unknown };
+  if (body.success !== true || typeof body.data !== "string") return null;
+
+  const head = await fetch(body.data, {
+    headers: { Authorization: `Bearer ${env.TORBOX_KEY}`, Range: "bytes=0-8191" },
+  });
+  if (!head.ok) return null;
+  return flacSeconds(new Uint8Array(await head.arrayBuffer()));
+}
 
 async function search(url: URL, env: Env): Promise<Response> {
   const match = buildMatchQuery(url.searchParams.get("q") ?? "");
@@ -67,7 +132,7 @@ async function search(url: URL, env: Env): Promise<Response> {
         artist: r.artist,
         album: r.album ?? "",
         format: r.format,
-        duration: r.duration ?? undefined,
+        duration: publicDuration(r.duration as number | null),
       })),
     });
   } catch (err) {
@@ -195,7 +260,7 @@ async function sync(env: Env): Promise<void> {
       const artist = parseArtist(String(t.name ?? ""));
       for (const f of t.files ?? []) {
         const shortName = String(f.short_name ?? "");
-        if (!isAudio(shortName, f.mimetype)) continue;
+        if (!isFlac(shortName)) continue;
         stmts.push(
           env.DB.prepare(
             `INSERT INTO tracks(torrent_id,file_id,title,artist,album,size,format)
