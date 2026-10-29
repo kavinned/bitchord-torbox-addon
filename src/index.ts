@@ -1,4 +1,4 @@
-import { buildMatchQuery } from "./tracks";
+import { buildMatchQuery, extensionOf, isAudio, parseArtist, parseTitle } from "./tracks";
 import type { Env } from "./types";
 
 const MANIFEST = {
@@ -25,8 +25,85 @@ export default {
     return notFound();
   },
 
-  async scheduled(): Promise<void> {},
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    ctx.waitUntil(sync(env));
+  },
 } satisfies ExportedHandler<Env>;
+
+const SYNC_PAGE = 25;
+
+/**
+ * One page of the library per tick, inserting only what is not already here.
+ * A cursor rather than a full pass because the whole `mylist` is 9 MB: parsing
+ * that in one invocation is over the free plan's CPU budget.
+ */
+async function sync(env: Env): Promise<void> {
+  if (!env.TORBOX_KEY) {
+    console.error("sync: TORBOX_KEY is not set");
+    return;
+  }
+
+  try {
+    const row = await env.DB.prepare("SELECT cursor FROM sync_state WHERE id = 1")
+      .first<{ cursor: number }>();
+    const cursor = row?.cursor ?? 0;
+
+    const res = await fetch(
+      `https://api.torbox.app/v1/api/torrents/mylist?limit=${SYNC_PAGE}&offset=${cursor}`,
+      { headers: { Authorization: `Bearer ${env.TORBOX_KEY}` } },
+    );
+    if (!res.ok) {
+      console.error("sync: mylist", res.status);
+      return;
+    }
+
+    const body = (await res.json()) as { data?: any[] };
+    const torrents = body.data ?? [];
+
+    if (torrents.length === 0) {
+      await env.DB.prepare("UPDATE sync_state SET cursor = 0 WHERE id = 1").run();
+      return;
+    }
+
+    const stmts: D1PreparedStatement[] = [];
+    for (const t of torrents) {
+      const artist = parseArtist(String(t.name ?? ""));
+      for (const f of t.files ?? []) {
+        const shortName = String(f.short_name ?? "");
+        if (!isAudio(shortName, f.mimetype)) continue;
+        stmts.push(
+          env.DB.prepare(
+            `INSERT INTO tracks(torrent_id,file_id,title,artist,album,size,format)
+             SELECT ?1,?2,?3,?4,?5,?6,?7
+             WHERE NOT EXISTS (
+               SELECT 1 FROM tracks WHERE torrent_id = ?1 AND file_id = ?2
+             )`,
+          ).bind(
+            Number(t.id) || 0,
+            Number(f.id) || 0,
+            parseTitle(shortName),
+            artist,
+            String(t.name ?? ""),
+            Number(f.size) || 0,
+            extensionOf(shortName),
+          ),
+        );
+      }
+    }
+
+    if (stmts.length > 0) await env.DB.batch(stmts);
+
+    // A short page means this was the end of the account; start over.
+    const next = torrents.length < SYNC_PAGE ? 0 : cursor + torrents.length;
+    await env.DB.prepare("UPDATE sync_state SET cursor = ?1 WHERE id = 1").bind(next).run();
+  } catch (err) {
+    console.error("sync failed:", err instanceof Error ? err.message : err);
+  }
+}
 
 /**
  * A minted link, cached at the edge. TorBox returns the same URL every time for
