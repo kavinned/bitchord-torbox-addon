@@ -2,3 +2,6 @@
 .dev.vars
 node_modules/
 seed.sql
+
+# Local config with the real D1 id; deploy with `--config wrangler.local.toml`.
+wrangler.local.toml
