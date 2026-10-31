@@ -7,6 +7,9 @@ compatibility_date = "2026-10-29"
 [[d1_databases]]
 binding = "DB"
 database_name = "bitchord-addon"
+# Your own database: `wrangler d1 create bitchord-addon`, or `wrangler d1 list`
+# to find an existing one's id. Only needed to deploy; `wrangler dev` runs a
+# local copy.
 database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
 
 [triggers]
