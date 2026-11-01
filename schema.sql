@@ -16,6 +16,11 @@ CREATE TABLE IF NOT EXISTS tracks (
   UNIQUE (torrent_id, file_id)
 );
 
+-- The cron asks "any durations left?" every 2 minutes. Without this, that is a
+-- full table scan returning nothing, which was ~83% of the daily D1 row-read
+-- budget. Partial, so it stays empty once the backfill is done.
+CREATE INDEX IF NOT EXISTS tracks_need_duration ON tracks(id) WHERE duration IS NULL;
+
 CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
   title,
   artist,
