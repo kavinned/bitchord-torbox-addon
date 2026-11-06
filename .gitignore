@@ -8,3 +8,7 @@ wrangler.local.toml
 
 # Handoff notes are for the next session, not the repo's history.
 docs/handoffs/
+
+# Local agent tooling: skills live in .agents/skills, .claude/skills links to it.
+.claude/
+.agents/
