@@ -5,3 +5,6 @@ seed.sql
 
 # Local config with the real D1 id; deploy with `--config wrangler.local.toml`.
 wrangler.local.toml
+
+# Handoff notes are for the next session, not the repo's history.
+docs/handoffs/
